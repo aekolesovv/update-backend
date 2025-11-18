@@ -1,0 +1,57 @@
+{
+    "name": "update-backend",
+    "version": "1.0.0",
+    "description": ":)",
+    "main": "app.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "check": "npm run lint && npm run format:check",
+        "fix": "npm run lint:fix && npm run format",
+        "start": "node app.js",
+        "dev": "nodemon app.js"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/timuritodev/update-backend"
+    },
+    "author": "Timurito",
+    "license": "ISC",
+    "bugs": {
+        "url": "https://github.com/timuritodev/update-backend/issues"
+    },
+    "homepage": "https://github.com/timuritodev/update-backend-api#readme",
+    "lint-staged": {
+        "*.js": [
+            "eslint --fix",
+            "prettier --write"
+        ]
+    },
+    "devDependencies": {
+        "eslint": "^8.28.0",
+        "eslint-config-airbnb-base": "^15.0.0",
+        "eslint-config-prettier": "^10.1.8",
+        "eslint-plugin-import": "^2.26.0",
+        "eslint-plugin-prettier": "^5.5.4",
+        "nodemon": "^2.0.20",
+        "prettier": "^3.6.2"
+    },
+    "dependencies": {
+        "body-parser": "^1.20.1",
+        "celebrate": "^15.0.1",
+        "cors": "^2.8.5",
+        "dotenv": "^16.0.3",
+        "express": "^4.18.2",
+        "express-rate-limit": "^6.7.0",
+        "express-session": "^1.18.0",
+        "express-winston": "^4.2.0",
+        "helmet": "^6.0.1",
+        "nodemailer": "^6.9.7",
+        "swagger-jsdoc": "^6.2.8",
+        "swagger-ui-express": "^5.0.1",
+        "winston": "^3.8.2"
+    }
+}
