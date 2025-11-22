@@ -1,4 +1,4 @@
-name: Deploy Frontend
+name: Deploy Backend
 
 on:
     push:
@@ -16,9 +16,6 @@ jobs:
             - name: Install dependencies
               run: npm ci
 
-            - name: Build project
-              run: npm run build
-
             - name: Deploy to server
               if: success()
               uses: appleboy/ssh-action@v0.1.10
@@ -29,9 +26,6 @@ jobs:
                   script: |
                       set -e
                       cd /home/adminupdate/update-backend
-                      git fetch origin main
-                      git reset --hard origin/main
-
+                      git pull origin main
                       npm ci
-                      npm run build
                       pm2 restart backend
