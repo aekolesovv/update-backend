@@ -27,11 +27,11 @@ jobs:
                   username: ${{ secrets.SERVER_USER }}
                   key: ${{ secrets.SERVER_SSH_KEY }}
                   script: |
-                      set -e 
-                      cd /home/bayar/bayar-frontend
+                      set -e
+                      cd /home/adminupdate/update-backend
                       git fetch origin main
                       git reset --hard origin/main
 
                       npm ci
                       npm run build
-                      pm2 restart frontend
+                      pm2 restart backend
