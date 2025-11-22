@@ -36,7 +36,7 @@ app.use(helmet());
 app.use(rateLimiter);
 
 // Swagger документация
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use('/api/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.get('/crash-test', () => {
     setTimeout(() => {
