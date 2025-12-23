@@ -65,8 +65,30 @@ const sendOrderDetails = async ({ email, greetings }) => {
     await transporter.sendMail(mailOptions);
 };
 
+const sendAdminPaymentNotify = async ({ subject, text }) => {
+    const transporter = nodemailer.createTransport({
+        host: process.env.HOST,
+        port: 587,
+        secure: false,
+        auth: {
+            user: process.env.MAIL,
+            pass: process.env.PASS,
+        },
+    });
+
+    const mailOptions = {
+        from: process.env.MAIL,
+        to: process.env.MAIL, // ты сам себе
+        subject,
+        text,
+    };
+
+    await transporter.sendMail(mailOptions);
+};
+
 module.exports = {
     sendEmailInfo,
     sendPasswordResetEmail,
     sendOrderDetails,
+    sendAdminPaymentNotify,
 };
