@@ -151,17 +151,26 @@ router.post('/prodamus/webhook', async (req, res) => {
             const { order_num, sum, customer_email, payment_status_description, date } = data;
 
             if (customer_email) {
-                await sendOrderDetails({
-                    email: customer_email,
-                    greetings: `
+                try {
+                    await sendOrderDetails({
+                        email: customer_email,
+                        greetings: `
 Спасибо за оплату ❤️
 
 Заказ: ${order_num}
 Сумма: ${sum} ₽
 Дата: ${date}
 Статус: ${payment_status_description}
-                    `,
-                });
+                        `,
+                    });
+                    console.log(`✅ Email sent to ${customer_email}`);
+                } catch (emailError) {
+                    console.error(
+                        `❌ Failed to send email to ${customer_email}:`,
+                        emailError.message
+                    );
+                    // Не прерываем выполнение, продолжаем отправку уведомления админу
+                }
             }
 
             await sendAdminPaymentNotify({
