@@ -9,34 +9,39 @@ router.post('/prodamus/webhook', async (req, res) => {
     try {
         const secret = process.env.PRODAMUS_SECRET;
         const sign = req.headers['sign'];
-        const rawBody = req.body.toString('utf8');
 
-        const params = Object.fromEntries(new URLSearchParams(rawBody));
-        delete params.sign;
+        const raw = req.body.toString('utf8');
 
-        const sortedString = Object.keys(params)
+        // превращаем в объект
+        const data = Object.fromEntries(new URLSearchParams(raw));
+
+        // УБИРАЕМ sign если есть
+        delete data.sign;
+
+        // СОРТИРОВКА КЛЮЧЕЙ
+        const sorted = Object.keys(data)
             .sort()
-            .map(key => `${key}=${params[key]}`)
+            .map(key => `${key}=${data[key]}`)
             .join('&');
 
-        const hash = crypto.createHmac('sha256', secret).update(sortedString).digest('hex');
+        const hash = crypto.createHmac('sha256', secret).update(sorted).digest('hex');
 
         console.log('------ PRODAMUS WEBHOOK ------');
         console.log('SIGN HEADER:', sign);
         console.log('HASH CALC :', hash);
-        console.log('STRING   :', sortedString);
+        console.log('STRING   :', sorted);
 
         if (hash !== sign) {
             console.error('❌ Invalid signature');
             return res.status(403).json({ error: 'Invalid signature' });
         }
 
-        console.log('✅ Signature valid');
+        console.log('✅ SIGNATURE OK');
 
-        if (params.payment_status === 'success') {
-            logPayment(params);
+        if (data.payment_status === 'success') {
+            logPayment(data);
 
-            const { order_num, sum, customer_email, payment_status_description, date } = params;
+            const { order_num, sum, customer_email, payment_status_description, date } = data;
 
             if (customer_email) {
                 await sendOrderDetails({
@@ -48,7 +53,7 @@ router.post('/prodamus/webhook', async (req, res) => {
 Сумма: ${sum} ₽
 Дата: ${date}
 Статус: ${payment_status_description}
-          `,
+                    `,
                 });
             }
 
@@ -59,8 +64,7 @@ router.post('/prodamus/webhook', async (req, res) => {
 Сумма: ${sum} ₽
 Email: ${customer_email || 'не указан'}
 Дата: ${date}
-Статус: ${payment_status_description}
-        `,
+                `,
             });
         }
 
