@@ -17,7 +17,8 @@ const { PORT = 3001 } = process.env;
 
 const app = express();
 
-app.use('/api', webhooksRoutes);
+app.use('/api/prodamus/webhook', bodyParser.raw({ type: 'application/x-www-form-urlencoded' }));
+
 app.use(bodyParser.json());
 
 app.use(
@@ -47,6 +48,7 @@ app.get('/crash-test', () => {
 });
 
 app.use(mailerRoutes);
+app.use('/api', webhooksRoutes);
 
 app.use((req, res, next) => next(new NotFoundError('Страница не найдена')));
 app.use(errorLogger);
