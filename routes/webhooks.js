@@ -1,5 +1,7 @@
-const express = require('express');
 const crypto = require('crypto');
+
+const express = require('express');
+
 const { sendOrderDetails, sendAdminPaymentNotify } = require('../models/mailer');
 const { logPayment } = require('../utils/paymentLogger');
 
@@ -8,23 +10,36 @@ const router = express.Router();
 router.post('/prodamus/webhook', async (req, res) => {
     try {
         const secret = process.env.PRODAMUS_SECRET;
-        const sign = req.headers['sign'];
+        const { sign } = req.headers;
 
         const raw = req.body.toString('utf8');
 
-        // превращаем в объект
-        const data = Object.fromEntries(new URLSearchParams(raw));
+        // Парсим raw body вручную, сохраняя исходные URL-encoded значения
+        const parts = raw.split('&');
 
-        // УБИРАЕМ sign если есть
-        delete data.sign;
+        const pairs = parts
+            .map(part => {
+                const equalIndex = part.indexOf('=');
+                if (equalIndex === -1) return null;
+
+                const key = part.substring(0, equalIndex);
+                const encodedValue = part.substring(equalIndex + 1);
+
+                return key !== 'sign' ? [key, encodedValue] : null;
+            })
+            .filter(pair => pair !== null);
 
         // СОРТИРОВКА КЛЮЧЕЙ
-        const sorted = Object.keys(data)
-            .sort()
-            .map(key => `${key}=${data[key]}`)
-            .join('&');
+        pairs.sort((a, b) => a[0].localeCompare(b[0]));
+
+        // Формируем строку для подписи с исходными URL-encoded значениями
+        const sorted = pairs.map(([key, val]) => `${key}=${val}`).join('&');
 
         const hash = crypto.createHmac('sha256', secret).update(sorted).digest('hex');
+
+        // Для работы с данными используем декодированные значения
+        const data = Object.fromEntries(new URLSearchParams(raw));
+        delete data.sign;
 
         console.log('------ PRODAMUS WEBHOOK ------');
         console.log('SIGN HEADER:', sign);
