@@ -1,45 +1,56 @@
 const crypto = require('crypto');
 
 const express = require('express');
+const multer = require('multer');
 
 const { sendOrderDetails, sendAdminPaymentNotify } = require('../models/mailer');
 const { logPayment } = require('../utils/paymentLogger');
 
 const router = express.Router();
 
-router.post('/prodamus/webhook', async (req, res) => {
+// Настройка multer для обработки multipart/form-data
+const upload = multer();
+
+router.post('/prodamus/webhook', upload.any(), async (req, res) => {
     try {
         const secret = process.env.PRODAMUS_SECRET;
         const { sign } = req.headers;
 
-        const raw = req.body.toString('utf8');
+        // Получаем все поля из multipart/form-data
+        const fields = {};
+        req.body = req.body || {};
 
-        // Парсим raw body вручную, сохраняя исходные URL-encoded значения
-        const parts = raw.split('&');
+        // Собираем все поля из req.body (multer уже распарсил multipart)
+        Object.keys(req.body).forEach(key => {
+            if (key !== 'sign') {
+                fields[key] = req.body[key];
+            }
+        });
 
-        const pairs = parts
-            .map(part => {
-                const equalIndex = part.indexOf('=');
-                if (equalIndex === -1) return null;
+        // Функция для URL-кодирования в формате application/x-www-form-urlencoded
+        // (пробелы как +, как требует Prodamus)
+        const urlEncode = str => {
+            if (typeof str !== 'string') {
+                str = String(str);
+            }
+            return encodeURIComponent(str).replace(/%20/g, '+');
+        };
 
-                const key = part.substring(0, equalIndex);
-                const encodedValue = part.substring(equalIndex + 1);
-
-                return key !== 'sign' ? [key, encodedValue] : null;
+        // СОРТИРОВКА КЛЮЧЕЙ и формирование строки для подписи
+        const sortedKeys = Object.keys(fields).sort();
+        const sorted = sortedKeys
+            .map(key => {
+                const value = fields[key] || '';
+                // URL-encode значение для подписи (пробелы как +)
+                const encodedValue = urlEncode(value);
+                return `${key}=${encodedValue}`;
             })
-            .filter(pair => pair !== null);
-
-        // СОРТИРОВКА КЛЮЧЕЙ
-        pairs.sort((a, b) => a[0].localeCompare(b[0]));
-
-        // Формируем строку для подписи с исходными URL-encoded значениями
-        const sorted = pairs.map(([key, val]) => `${key}=${val}`).join('&');
+            .join('&');
 
         const hash = crypto.createHmac('sha256', secret).update(sorted).digest('hex');
 
-        // Для работы с данными используем декодированные значения
-        const data = Object.fromEntries(new URLSearchParams(raw));
-        delete data.sign;
+        // Для работы с данными используем исходные значения
+        const data = { ...fields };
 
         console.log('------ PRODAMUS WEBHOOK ------');
         console.log('SIGN HEADER:', sign);
