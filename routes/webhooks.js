@@ -1,9 +1,7 @@
-// routes/prodamusWebhook.js
-const { sendOrderDetails, sendAdminPaymentNotify } = require('../models/mailer');
-const { logPayment } = require('../utils/paymentLogger');
-
 const express = require('express');
 const crypto = require('crypto');
+const { sendOrderDetails, sendAdminPaymentNotify } = require('../models/mailer');
+const { logPayment } = require('../utils/paymentLogger');
 
 const router = express.Router();
 
@@ -12,42 +10,38 @@ router.post('/prodamus/webhook', async (req, res) => {
         const secret = process.env.PRODAMUS_SECRET;
         const sign = req.headers['sign'];
 
-        const body = JSON.stringify(req.body);
+        const rawBody = req.body.toString('utf8');
 
-        const hash = crypto.createHmac('sha256', secret).update(body).digest('hex');
+        const hash = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
 
         if (hash !== sign) {
-            console.error('❌ Invalid signature');
+            console.log('❌ Invalid signature');
             return res.status(403).json({ error: 'Invalid signature' });
         }
 
-        const payment = req.body;
+        const payment = Object.fromEntries(new URLSearchParams(rawBody));
 
         if (payment.paid === '1') {
             logPayment(payment);
 
             const { order_id, order_sum, customer_email, description, pay_time } = payment;
 
-            /* -------- письмо клиенту -------- */
             if (customer_email) {
-                const clientText = `
+                await sendOrderDetails({
+                    email: customer_email,
+                    greetings: `
 Спасибо за оплату ❤️
 
 Тариф: ${description}
 Сумма: ${order_sum} ₽
 Дата оплаты: ${pay_time}
-
-Добро пожаловать в Update!
-                `;
-
-                await sendOrderDetails({
-                    email: customer_email,
-                    greetings: clientText,
+                    `,
                 });
             }
 
-            /* -------- письмо админу -------- */
-            const adminText = `
+            await sendAdminPaymentNotify({
+                subject: 'Новая оплата на updateyou.ru',
+                text: `
 💰 ПРОИЗОШЛА ОПЛАТА
 
 Тариф: ${description}
@@ -55,19 +49,15 @@ router.post('/prodamus/webhook', async (req, res) => {
 Email клиента: ${customer_email || 'не указан'}
 Order ID: ${order_id}
 Дата оплаты: ${pay_time}
-            `;
-
-            await sendAdminPaymentNotify({
-                subject: 'Новая оплата на updateyou.ru',
-                text: adminText,
+                `,
             });
 
             console.log('✅ Оплата обработана:', order_id);
         }
 
         res.json({ status: 'ok' });
-    } catch (error) {
-        console.error('🔥 Webhook error:', error);
+    } catch (e) {
+        console.error('🔥 Webhook error:', e);
         res.status(500).json({ error: 'Server error' });
     }
 });
