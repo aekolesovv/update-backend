@@ -51,32 +51,69 @@ router.post('/prodamus/webhook', async (req, res) => {
 
         console.log('Pairs extracted:', pairs.length);
 
-        // СОРТИРОВКА КЛЮЧЕЙ
-        pairs.sort((a, b) => a[0].localeCompare(b[0]));
+        // ВАРИАНТ 1: Сортировка по закодированным ключам, исходные значения
+        const pairs1 = [...pairs];
+        pairs1.sort((a, b) => a[0].localeCompare(b[0]));
+        const sorted1 = pairs1.map(([key, val]) => `${key}=${val}`).join('&');
+        const hash1 = crypto.createHmac('sha256', secret).update(sorted1).digest('hex');
 
-        // Формируем строку для подписи с исходными URL-encoded значениями
-        const sorted = pairs.map(([key, val]) => `${key}=${val}`).join('&');
-
-        console.log('First 5 pairs:', pairs.slice(0, 5));
-        console.log('Last 5 pairs:', pairs.slice(-5));
-        console.log('Sorted string length:', sorted.length);
-        console.log('Sorted string (first 300 chars):', sorted.substring(0, 300));
-
-        // Пробуем разные варианты формирования подписи
-        const hash1 = crypto.createHmac('sha256', secret).update(sorted).digest('hex');
-
-        // Вариант 2: может быть нужно использовать raw body без парсинга (но без sign)?
-        const rawWithoutSign = raw.replace(/[&?]sign=[^&]*/, '').replace(/^sign=[^&]*&/, '');
-        const hash2 = crypto.createHmac('sha256', secret).update(rawWithoutSign).digest('hex');
-
-        // Вариант 3: может быть нужно декодировать и закодировать заново?
-        const decodedPairs = pairs.map(([key, val]) => {
-            const decoded = decodeURIComponent(val);
-            const reencoded = encodeURIComponent(decoded).replace(/%20/g, '+');
-            return [key, reencoded];
+        // ВАРИАНТ 2: Декодировать ключи, сортировать, потом закодировать обратно
+        const pairs2 = pairs.map(([key, val]) => {
+            const decodedKey = decodeURIComponent(key);
+            return [decodedKey, val];
         });
-        const sortedReencoded = decodedPairs.map(([key, val]) => `${key}=${val}`).join('&');
-        const hash3 = crypto.createHmac('sha256', secret).update(sortedReencoded).digest('hex');
+        pairs2.sort((a, b) => a[0].localeCompare(b[0]));
+        const sorted2 = pairs2
+            .map(([key, val]) => {
+                const encodedKey = encodeURIComponent(key);
+                return `${encodedKey}=${val}`;
+            })
+            .join('&');
+        const hash2 = crypto.createHmac('sha256', secret).update(sorted2).digest('hex');
+
+        // ВАРИАНТ 3: Декодировать и ключи и значения, потом закодировать заново
+        const pairs3 = pairs.map(([key, val]) => {
+            const decodedKey = decodeURIComponent(key);
+            const decodedVal = decodeURIComponent(val);
+            const reencodedVal = encodeURIComponent(decodedVal).replace(/%20/g, '+');
+            return [decodedKey, reencodedVal];
+        });
+        pairs3.sort((a, b) => a[0].localeCompare(b[0]));
+        const sorted3 = pairs3
+            .map(([key, val]) => {
+                const encodedKey = encodeURIComponent(key);
+                return `${encodedKey}=${val}`;
+            })
+            .join('&');
+        const hash3 = crypto.createHmac('sha256', secret).update(sorted3).digest('hex');
+
+        // ВАРИАНТ 4: Raw body без sign (более точное удаление)
+        let rawWithoutSign = raw;
+        // Удаляем sign в начале
+        if (rawWithoutSign.startsWith('sign=')) {
+            const signEnd = rawWithoutSign.indexOf('&');
+            if (signEnd !== -1) {
+                rawWithoutSign = rawWithoutSign.substring(signEnd + 1);
+            } else {
+                rawWithoutSign = '';
+            }
+        }
+        // Удаляем sign в середине/конце
+        rawWithoutSign = rawWithoutSign.replace(/&sign=[^&]*/, '').replace(/sign=[^&]*&/, '');
+        const hash4 = crypto.createHmac('sha256', secret).update(rawWithoutSign).digest('hex');
+
+        // ВАРИАНТ 5: Декодировать ключи для сортировки, но использовать исходные ключи и значения
+        const pairs5 = pairs.map(([key, val]) => {
+            const decodedKey = decodeURIComponent(key);
+            return { originalKey: key, decodedKey, value: val };
+        });
+        pairs5.sort((a, b) => a.decodedKey.localeCompare(b.decodedKey));
+        const sorted5 = pairs5.map(p => `${p.originalKey}=${p.value}`).join('&');
+        const hash5 = crypto.createHmac('sha256', secret).update(sorted5).digest('hex');
+
+        console.log('First 5 pairs (variant 1):', pairs1.slice(0, 5));
+        console.log('Last 5 pairs (variant 1):', pairs1.slice(-5));
+        console.log('Sorted string (variant 1, first 300 chars):', sorted1.substring(0, 300));
 
         // Для работы с данными парсим raw body с декодированием
         const urlParams = new URLSearchParams(raw);
@@ -86,27 +123,34 @@ router.post('/prodamus/webhook', async (req, res) => {
         const currentTime = new Date().toISOString();
         console.log(`\n🕐 [${currentTime}] ------ PRODAMUS WEBHOOK ------`);
         console.log('SIGN HEADER:', sign);
-        console.log('HASH CALC (variant 1):', hash1);
-        console.log('HASH CALC (variant 2 - raw without sign):', hash2);
-        console.log('HASH CALC (variant 3 - reencoded):', hash3);
-        console.log('STRING   :', sorted);
+        console.log('HASH CALC (variant 1 - encoded keys, original values):', hash1);
+        console.log('HASH CALC (variant 2 - decoded keys, reencoded):', hash2);
+        console.log('HASH CALC (variant 3 - decoded keys+values, reencoded):', hash3);
+        console.log('HASH CALC (variant 4 - raw without sign):', hash4);
+        console.log('HASH CALC (variant 5 - decoded keys for sort, original keys+values):', hash5);
         console.log('Fields count:', pairs.length);
 
         // Проверяем все варианты
         const matches1 = hash1 === sign;
         const matches2 = hash2 === sign;
         const matches3 = hash3 === sign;
+        const matches4 = hash4 === sign;
+        const matches5 = hash5 === sign;
         console.log('Match variant 1:', matches1);
         console.log('Match variant 2:', matches2);
         console.log('Match variant 3:', matches3);
+        console.log('Match variant 4:', matches4);
+        console.log('Match variant 5:', matches5);
 
-        if (!matches1 && !matches2 && !matches3) {
+        if (!matches1 && !matches2 && !matches3 && !matches4 && !matches5) {
             const errorTime = new Date().toISOString();
             console.error(`\n🕐 [${errorTime}] ❌ Invalid signature`);
             console.error('Expected:', sign);
             console.error('Got (variant 1):', hash1);
             console.error('Got (variant 2):', hash2);
             console.error('Got (variant 3):', hash3);
+            console.error('Got (variant 4):', hash4);
+            console.error('Got (variant 5):', hash5);
             return res.status(403).json({ error: 'Invalid signature' });
         }
 
