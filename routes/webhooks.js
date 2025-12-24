@@ -14,12 +14,19 @@ router.post('/prodamus/webhook', async (req, res) => {
 
         const hash = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
 
+        console.log('----- PRODAMUS WEBHOOK -----');
+        console.log('RAW BODY:', rawBody);
+        console.log('HEADER SIGN:', sign);
+        console.log('CALCULATED HASH:', hash);
+
         if (hash !== sign) {
-            console.log('❌ Invalid signature');
+            console.error('❌ Invalid signature');
             return res.status(403).json({ error: 'Invalid signature' });
         }
 
         const payment = Object.fromEntries(new URLSearchParams(rawBody));
+
+        console.log('PARSED PAYMENT:', payment);
 
         if (payment.paid === '1') {
             logPayment(payment);
@@ -51,8 +58,6 @@ Order ID: ${order_id}
 Дата оплаты: ${pay_time}
                 `,
             });
-
-            console.log('✅ Оплата обработана:', order_id);
         }
 
         res.json({ status: 'ok' });
