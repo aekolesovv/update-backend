@@ -50,6 +50,7 @@
         "express-session": "^1.18.0",
         "express-winston": "^4.2.0",
         "helmet": "^6.0.1",
+        "multer": "^2.0.2",
         "nodemailer": "^6.9.7",
         "swagger-jsdoc": "^6.2.8",
         "swagger-ui-express": "^5.0.1",

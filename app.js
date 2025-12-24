@@ -17,8 +17,6 @@ const { PORT = 3001 } = process.env;
 
 const app = express();
 
-app.use('/api/prodamus/webhook', bodyParser.raw({ type: 'application/x-www-form-urlencoded' }));
-
 app.use(bodyParser.json());
 
 app.use(
