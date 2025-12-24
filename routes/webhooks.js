@@ -9,29 +9,34 @@ router.post('/prodamus/webhook', async (req, res) => {
     try {
         const secret = process.env.PRODAMUS_SECRET;
         const sign = req.headers['sign'];
+        const rawBody = req.body.toString('utf8');
 
-        const rawBody = req.body.toString('utf8'); // теперь это Buffer
+        const params = Object.fromEntries(new URLSearchParams(rawBody));
+        delete params.sign;
 
-        const hash = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+        const sortedString = Object.keys(params)
+            .sort()
+            .map(key => `${key}=${params[key]}`)
+            .join('&');
 
-        console.log('----- PRODAMUS WEBHOOK -----');
-        console.log('RAW BODY:', rawBody);
-        console.log('HEADER SIGN:', sign);
-        console.log('CALCULATED HASH:', hash);
+        const hash = crypto.createHmac('sha256', secret).update(sortedString).digest('hex');
+
+        console.log('------ PRODAMUS WEBHOOK ------');
+        console.log('SIGN HEADER:', sign);
+        console.log('HASH CALC :', hash);
+        console.log('STRING   :', sortedString);
 
         if (hash !== sign) {
             console.error('❌ Invalid signature');
             return res.status(403).json({ error: 'Invalid signature' });
         }
 
-        const payment = Object.fromEntries(new URLSearchParams(rawBody));
+        console.log('✅ Signature valid');
 
-        console.log('PARSED PAYMENT:', payment);
+        if (params.payment_status === 'success') {
+            logPayment(params);
 
-        if (payment.paid === '1') {
-            logPayment(payment);
-
-            const { order_id, order_sum, customer_email, description, pay_time } = payment;
+            const { order_num, sum, customer_email, payment_status_description, date } = params;
 
             if (customer_email) {
                 await sendOrderDetails({
@@ -39,23 +44,22 @@ router.post('/prodamus/webhook', async (req, res) => {
                     greetings: `
 Спасибо за оплату ❤️
 
-Тариф: ${description}
-Сумма: ${order_sum} ₽
-Дата оплаты: ${pay_time}
+Заказ: ${order_num}
+Сумма: ${sum} ₽
+Дата: ${date}
+Статус: ${payment_status_description}
           `,
                 });
             }
 
             await sendAdminPaymentNotify({
-                subject: 'Новая оплата на updateyou.ru',
+                subject: '💰 Новая оплата updateyou.ru',
                 text: `
-💰 ПРОИЗОШЛА ОПЛАТА
-
-Тариф: ${description}
-Сумма: ${order_sum} ₽
-Email клиента: ${customer_email || 'не указан'}
-Order ID: ${order_id}
-Дата оплаты: ${pay_time}
+Заказ: ${order_num}
+Сумма: ${sum} ₽
+Email: ${customer_email || 'не указан'}
+Дата: ${date}
+Статус: ${payment_status_description}
         `,
             });
         }
