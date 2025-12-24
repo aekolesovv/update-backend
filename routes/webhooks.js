@@ -30,6 +30,8 @@ router.post('/prodamus/webhook', async (req, res) => {
         const raw = req.body ? req.body.toString('utf8') : '';
 
         console.log('Raw body (first 200 chars):', raw.substring(0, 200));
+        console.log('Raw body contains sign:', raw.includes('sign='));
+        console.log('Raw body full length:', raw.length);
         console.log('Secret key length:', secret ? secret.length : 0);
         console.log('Secret key (first 10 chars):', secret ? secret.substring(0, 10) : 'NOT SET');
 
@@ -111,6 +113,21 @@ router.post('/prodamus/webhook', async (req, res) => {
         const sorted5 = pairs5.map(p => `${p.originalKey}=${p.value}`).join('&');
         const hash5 = crypto.createHmac('sha256', secret).update(sorted5).digest('hex');
 
+        // ВАРИАНТ 6: Весь raw body как есть (включая sign, если есть)
+        const hash6 = crypto.createHmac('sha256', secret).update(raw).digest('hex');
+
+        // ВАРИАНТ 7: Попробуем MD5 вместо SHA256 (на всякий случай)
+        const hash7 = crypto.createHmac('md5', secret).update(sorted1).digest('hex');
+
+        // ВАРИАНТ 8: Может быть секретный ключ нужно использовать как hex?
+        let secretAsHex;
+        try {
+            secretAsHex = Buffer.from(secret, 'hex');
+        } catch (e) {
+            secretAsHex = secret;
+        }
+        const hash8 = crypto.createHmac('sha256', secretAsHex).update(sorted1).digest('hex');
+
         console.log('First 5 pairs (variant 1):', pairs1.slice(0, 5));
         console.log('Last 5 pairs (variant 1):', pairs1.slice(-5));
         console.log('Sorted string (variant 1, first 300 chars):', sorted1.substring(0, 300));
@@ -128,6 +145,9 @@ router.post('/prodamus/webhook', async (req, res) => {
         console.log('HASH CALC (variant 3 - decoded keys+values, reencoded):', hash3);
         console.log('HASH CALC (variant 4 - raw without sign):', hash4);
         console.log('HASH CALC (variant 5 - decoded keys for sort, original keys+values):', hash5);
+        console.log('HASH CALC (variant 6 - full raw body):', hash6);
+        console.log('HASH CALC (variant 7 - MD5):', hash7);
+        console.log('HASH CALC (variant 8 - secret as hex):', hash8);
         console.log('Fields count:', pairs.length);
 
         // Проверяем все варианты
@@ -136,13 +156,28 @@ router.post('/prodamus/webhook', async (req, res) => {
         const matches3 = hash3 === sign;
         const matches4 = hash4 === sign;
         const matches5 = hash5 === sign;
+        const matches6 = hash6 === sign;
+        const matches7 = hash7 === sign;
+        const matches8 = hash8 === sign;
         console.log('Match variant 1:', matches1);
         console.log('Match variant 2:', matches2);
         console.log('Match variant 3:', matches3);
         console.log('Match variant 4:', matches4);
         console.log('Match variant 5:', matches5);
+        console.log('Match variant 6:', matches6);
+        console.log('Match variant 7:', matches7);
+        console.log('Match variant 8:', matches8);
 
-        if (!matches1 && !matches2 && !matches3 && !matches4 && !matches5) {
+        if (
+            !matches1 &&
+            !matches2 &&
+            !matches3 &&
+            !matches4 &&
+            !matches5 &&
+            !matches6 &&
+            !matches7 &&
+            !matches8
+        ) {
             const errorTime = new Date().toISOString();
             console.error(`\n🕐 [${errorTime}] ❌ Invalid signature`);
             console.error('Expected:', sign);
@@ -151,6 +186,13 @@ router.post('/prodamus/webhook', async (req, res) => {
             console.error('Got (variant 3):', hash3);
             console.error('Got (variant 4):', hash4);
             console.error('Got (variant 5):', hash5);
+            console.error('Got (variant 6):', hash6);
+            console.error('Got (variant 7):', hash7);
+            console.error('Got (variant 8):', hash8);
+            console.error('\n⚠️  ВОЗМОЖНЫЕ ПРИЧИНЫ:');
+            console.error('1. Неправильный секретный ключ (проверьте в настройках Prodamus)');
+            console.error('2. Ключ от другой среды (тестовая/продакшн)');
+            console.error('3. Другой алгоритм подписи');
             return res.status(403).json({ error: 'Invalid signature' });
         }
 
