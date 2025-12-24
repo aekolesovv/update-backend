@@ -17,6 +17,13 @@ const { PORT = 3001 } = process.env;
 
 const app = express();
 
+// Для вебхука Prodamus используем raw body для проверки подписи
+app.use(
+    '/api/prodamus/webhook',
+    bodyParser.raw({ type: 'application/x-www-form-urlencoded', limit: '10mb' })
+);
+
+app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
 app.use(
