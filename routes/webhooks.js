@@ -12,6 +12,13 @@ const router = express.Router();
 const upload = multer();
 
 router.post('/prodamus/webhook', upload.any(), async (req, res) => {
+    const startTime = new Date().toISOString();
+    console.log(`\n🕐 [${startTime}] PRODAMUS WEBHOOK RECEIVED`);
+    console.log('Content-Type:', req.headers['content-type']);
+    console.log('Body keys:', Object.keys(req.body || {}));
+    console.log('Body:', JSON.stringify(req.body, null, 2));
+    console.log('Files:', req.files);
+
     try {
         const secret = process.env.PRODAMUS_SECRET;
         const { sign } = req.headers;
@@ -27,13 +34,13 @@ router.post('/prodamus/webhook', upload.any(), async (req, res) => {
             }
         });
 
+        console.log('Fields extracted:', Object.keys(fields));
+
         // Функция для URL-кодирования в формате application/x-www-form-urlencoded
         // (пробелы как +, как требует Prodamus)
         const urlEncode = str => {
-            if (typeof str !== 'string') {
-                str = String(str);
-            }
-            return encodeURIComponent(str).replace(/%20/g, '+');
+            const stringValue = typeof str !== 'string' ? String(str) : str;
+            return encodeURIComponent(stringValue).replace(/%20/g, '+');
         };
 
         // СОРТИРОВКА КЛЮЧЕЙ и формирование строки для подписи
@@ -52,17 +59,23 @@ router.post('/prodamus/webhook', upload.any(), async (req, res) => {
         // Для работы с данными используем исходные значения
         const data = { ...fields };
 
-        console.log('------ PRODAMUS WEBHOOK ------');
+        const currentTime = new Date().toISOString();
+        console.log(`\n🕐 [${currentTime}] ------ PRODAMUS WEBHOOK ------`);
         console.log('SIGN HEADER:', sign);
         console.log('HASH CALC :', hash);
         console.log('STRING   :', sorted);
+        console.log('Fields count:', Object.keys(fields).length);
 
         if (hash !== sign) {
-            console.error('❌ Invalid signature');
+            const errorTime = new Date().toISOString();
+            console.error(`\n🕐 [${errorTime}] ❌ Invalid signature`);
+            console.error('Expected:', sign);
+            console.error('Got:', hash);
             return res.status(403).json({ error: 'Invalid signature' });
         }
 
-        console.log('✅ SIGNATURE OK');
+        const successTime = new Date().toISOString();
+        console.log(`\n🕐 [${successTime}] ✅ SIGNATURE OK`);
 
         if (data.payment_status === 'success') {
             logPayment(data);
@@ -94,9 +107,13 @@ Email: ${customer_email || 'не указан'}
             });
         }
 
+        const endTime = new Date().toISOString();
+        console.log(`🕐 [${endTime}] Webhook processed successfully\n`);
         res.json({ status: 'ok' });
     } catch (e) {
-        console.error('🔥 Webhook error:', e);
+        const errorTime = new Date().toISOString();
+        console.error(`\n🕐 [${errorTime}] 🔥 Webhook error:`, e);
+        console.error('Stack:', e.stack);
         res.status(500).json({ error: 'Server error' });
     }
 });
