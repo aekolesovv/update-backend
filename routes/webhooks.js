@@ -10,7 +10,7 @@ router.post('/prodamus/webhook', async (req, res) => {
         const secret = process.env.PRODAMUS_SECRET;
         const sign = req.headers['sign'];
 
-        const rawBody = req.body.toString('utf8');
+        const rawBody = req.body.toString('utf8'); // теперь это Buffer
 
         const hash = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
 
@@ -42,7 +42,7 @@ router.post('/prodamus/webhook', async (req, res) => {
 Тариф: ${description}
 Сумма: ${order_sum} ₽
 Дата оплаты: ${pay_time}
-                    `,
+          `,
                 });
             }
 
@@ -56,7 +56,7 @@ router.post('/prodamus/webhook', async (req, res) => {
 Email клиента: ${customer_email || 'не указан'}
 Order ID: ${order_id}
 Дата оплаты: ${pay_time}
-                `,
+        `,
             });
         }
 
