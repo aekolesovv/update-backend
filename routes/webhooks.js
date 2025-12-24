@@ -26,173 +26,119 @@ router.post('/prodamus/webhook', async (req, res) => {
 
         const sign = req.headers.sign || req.headers['X-Sign'] || req.headers['x-sign'];
 
-        // Получаем raw body для проверки подписи (bodyParser.raw сохраняет в req.body как Buffer)
+        // Парсим данные из POST запроса (application/x-www-form-urlencoded)
         const raw = req.body ? req.body.toString('utf8') : '';
+        const urlParams = new URLSearchParams(raw);
+        const flatData = Object.fromEntries(urlParams);
 
-        console.log('Raw body (first 200 chars):', raw.substring(0, 200));
-        console.log('Raw body contains sign:', raw.includes('sign='));
-        console.log('Raw body full length:', raw.length);
+        // Удаляем sign из данных для проверки подписи
+        delete flatData.sign;
+
+        // Функция для преобразования плоского объекта с ключами вида "products[0][name]"
+        // в вложенную структуру
+        const parseNestedObject = flatObj => {
+            const result = {};
+
+            Object.keys(flatObj).forEach(key => {
+                // Декодируем ключ
+                const decodedKey = decodeURIComponent(key);
+                const value = flatData[key];
+
+                // Парсим ключи вида "products[0][name]" или "products[0][price]"
+                const arrayMatch = decodedKey.match(/^([^[]+)\[(\d+)\]\[([^\]]+)\]$/);
+                if (arrayMatch) {
+                    // Формат: products[0][name]
+                    const baseKey = arrayMatch[1];
+                    const arrayIndex = parseInt(arrayMatch[2], 10);
+                    const objectKey = arrayMatch[3];
+
+                    if (!result[baseKey]) {
+                        result[baseKey] = [];
+                    }
+                    if (!result[baseKey][arrayIndex]) {
+                        result[baseKey][arrayIndex] = {};
+                    }
+                    result[baseKey][arrayIndex][objectKey] = value;
+                } else {
+                    // Обычный ключ без массивов
+                    result[decodedKey] = value;
+                }
+            });
+
+            return result;
+        };
+
+        const postData = parseNestedObject(flatData);
+
+        console.log('Post data keys:', Object.keys(postData));
+        console.log(
+            'Post data (first level):',
+            JSON.stringify(postData, null, 2).substring(0, 500)
+        );
         console.log('Secret key length:', secret ? secret.length : 0);
         console.log('Secret key (first 10 chars):', secret ? secret.substring(0, 10) : 'NOT SET');
 
-        // Парсим raw body вручную, сохраняя исходные URL-encoded значения
-        const parts = raw.split('&');
-        const pairs = [];
-
-        parts.forEach(part => {
-            const equalIndex = part.indexOf('=');
-            if (equalIndex === -1) return;
-
-            const key = part.substring(0, equalIndex);
-            const encodedValue = part.substring(equalIndex + 1);
-
-            if (key !== 'sign') {
-                pairs.push([key, encodedValue]);
+        // Функция для рекурсивной сортировки объекта по ключам
+        const sortObjectRecursive = obj => {
+            if (obj === null || typeof obj !== 'object') {
+                return obj;
             }
-        });
 
-        console.log('Pairs extracted:', pairs.length);
-
-        // ВАРИАНТ 1: Сортировка по закодированным ключам, исходные значения
-        const pairs1 = [...pairs];
-        pairs1.sort((a, b) => a[0].localeCompare(b[0]));
-        const sorted1 = pairs1.map(([key, val]) => `${key}=${val}`).join('&');
-        const hash1 = crypto.createHmac('sha256', secret).update(sorted1).digest('hex');
-
-        // ВАРИАНТ 2: Декодировать ключи, сортировать, потом закодировать обратно
-        const pairs2 = pairs.map(([key, val]) => {
-            const decodedKey = decodeURIComponent(key);
-            return [decodedKey, val];
-        });
-        pairs2.sort((a, b) => a[0].localeCompare(b[0]));
-        const sorted2 = pairs2
-            .map(([key, val]) => {
-                const encodedKey = encodeURIComponent(key);
-                return `${encodedKey}=${val}`;
-            })
-            .join('&');
-        const hash2 = crypto.createHmac('sha256', secret).update(sorted2).digest('hex');
-
-        // ВАРИАНТ 3: Декодировать и ключи и значения, потом закодировать заново
-        const pairs3 = pairs.map(([key, val]) => {
-            const decodedKey = decodeURIComponent(key);
-            const decodedVal = decodeURIComponent(val);
-            const reencodedVal = encodeURIComponent(decodedVal).replace(/%20/g, '+');
-            return [decodedKey, reencodedVal];
-        });
-        pairs3.sort((a, b) => a[0].localeCompare(b[0]));
-        const sorted3 = pairs3
-            .map(([key, val]) => {
-                const encodedKey = encodeURIComponent(key);
-                return `${encodedKey}=${val}`;
-            })
-            .join('&');
-        const hash3 = crypto.createHmac('sha256', secret).update(sorted3).digest('hex');
-
-        // ВАРИАНТ 4: Raw body без sign (более точное удаление)
-        let rawWithoutSign = raw;
-        // Удаляем sign в начале
-        if (rawWithoutSign.startsWith('sign=')) {
-            const signEnd = rawWithoutSign.indexOf('&');
-            if (signEnd !== -1) {
-                rawWithoutSign = rawWithoutSign.substring(signEnd + 1);
-            } else {
-                rawWithoutSign = '';
+            if (Array.isArray(obj)) {
+                return obj.map(item => sortObjectRecursive(item));
             }
-        }
-        // Удаляем sign в середине/конце
-        rawWithoutSign = rawWithoutSign.replace(/&sign=[^&]*/, '').replace(/sign=[^&]*&/, '');
-        const hash4 = crypto.createHmac('sha256', secret).update(rawWithoutSign).digest('hex');
 
-        // ВАРИАНТ 5: Декодировать ключи для сортировки, но использовать исходные ключи и значения
-        const pairs5 = pairs.map(([key, val]) => {
-            const decodedKey = decodeURIComponent(key);
-            return { originalKey: key, decodedKey, value: val };
-        });
-        pairs5.sort((a, b) => a.decodedKey.localeCompare(b.decodedKey));
-        const sorted5 = pairs5.map(p => `${p.originalKey}=${p.value}`).join('&');
-        const hash5 = crypto.createHmac('sha256', secret).update(sorted5).digest('hex');
+            const sorted = {};
+            const keys = Object.keys(obj).sort();
 
-        // ВАРИАНТ 6: Весь raw body как есть (включая sign, если есть)
-        const hash6 = crypto.createHmac('sha256', secret).update(raw).digest('hex');
+            keys.forEach(key => {
+                const value = obj[key];
+                // Приводим все значения к строкам согласно документации
+                if (value === null || value === undefined) {
+                    sorted[key] = '';
+                } else if (typeof value === 'object') {
+                    sorted[key] = sortObjectRecursive(value);
+                } else {
+                    sorted[key] = String(value);
+                }
+            });
 
-        // ВАРИАНТ 7: Попробуем MD5 вместо SHA256 (на всякий случай)
-        const hash7 = crypto.createHmac('md5', secret).update(sorted1).digest('hex');
+            return sorted;
+        };
 
-        // ВАРИАНТ 8: Может быть секретный ключ нужно использовать как hex?
-        let secretAsHex;
-        try {
-            secretAsHex = Buffer.from(secret, 'hex');
-        } catch (e) {
-            secretAsHex = secret;
-        }
-        const hash8 = crypto.createHmac('sha256', secretAsHex).update(sorted1).digest('hex');
+        // Сортируем данные рекурсивно
+        const sortedData = sortObjectRecursive(postData);
 
-        console.log('First 5 pairs (variant 1):', pairs1.slice(0, 5));
-        console.log('Last 5 pairs (variant 1):', pairs1.slice(-5));
-        console.log('Sorted string (variant 1, first 300 chars):', sorted1.substring(0, 300));
+        // Преобразуем в JSON строку
+        let jsonString = JSON.stringify(sortedData);
 
-        // Для работы с данными парсим raw body с декодированием
-        const urlParams = new URLSearchParams(raw);
-        const data = Object.fromEntries(urlParams);
-        delete data.sign;
+        // Экранируем / в JSON строке
+        jsonString = jsonString.replace(/\//g, '\\/');
+
+        console.log('JSON string (first 500 chars):', jsonString.substring(0, 500));
+        console.log('JSON string length:', jsonString.length);
+
+        // Подписываем через HMAC-SHA256
+        const hash = crypto.createHmac('sha256', secret).update(jsonString).digest('hex');
+
+        // Для работы с данными используем распарсенные данные
+        const data = postData;
 
         const currentTime = new Date().toISOString();
         console.log(`\n🕐 [${currentTime}] ------ PRODAMUS WEBHOOK ------`);
         console.log('SIGN HEADER:', sign);
-        console.log('HASH CALC (variant 1 - encoded keys, original values):', hash1);
-        console.log('HASH CALC (variant 2 - decoded keys, reencoded):', hash2);
-        console.log('HASH CALC (variant 3 - decoded keys+values, reencoded):', hash3);
-        console.log('HASH CALC (variant 4 - raw without sign):', hash4);
-        console.log('HASH CALC (variant 5 - decoded keys for sort, original keys+values):', hash5);
-        console.log('HASH CALC (variant 6 - full raw body):', hash6);
-        console.log('HASH CALC (variant 7 - MD5):', hash7);
-        console.log('HASH CALC (variant 8 - secret as hex):', hash8);
-        console.log('Fields count:', pairs.length);
+        console.log('HASH CALC:', hash);
+        console.log('JSON STRING:', jsonString);
 
-        // Проверяем все варианты
-        const matches1 = hash1 === sign;
-        const matches2 = hash2 === sign;
-        const matches3 = hash3 === sign;
-        const matches4 = hash4 === sign;
-        const matches5 = hash5 === sign;
-        const matches6 = hash6 === sign;
-        const matches7 = hash7 === sign;
-        const matches8 = hash8 === sign;
-        console.log('Match variant 1:', matches1);
-        console.log('Match variant 2:', matches2);
-        console.log('Match variant 3:', matches3);
-        console.log('Match variant 4:', matches4);
-        console.log('Match variant 5:', matches5);
-        console.log('Match variant 6:', matches6);
-        console.log('Match variant 7:', matches7);
-        console.log('Match variant 8:', matches8);
-
-        if (
-            !matches1 &&
-            !matches2 &&
-            !matches3 &&
-            !matches4 &&
-            !matches5 &&
-            !matches6 &&
-            !matches7 &&
-            !matches8
-        ) {
+        if (hash !== sign) {
             const errorTime = new Date().toISOString();
             console.error(`\n🕐 [${errorTime}] ❌ Invalid signature`);
             console.error('Expected:', sign);
-            console.error('Got (variant 1):', hash1);
-            console.error('Got (variant 2):', hash2);
-            console.error('Got (variant 3):', hash3);
-            console.error('Got (variant 4):', hash4);
-            console.error('Got (variant 5):', hash5);
-            console.error('Got (variant 6):', hash6);
-            console.error('Got (variant 7):', hash7);
-            console.error('Got (variant 8):', hash8);
+            console.error('Got:', hash);
+            console.error('JSON string:', jsonString);
             console.error('\n⚠️  ВОЗМОЖНЫЕ ПРИЧИНЫ:');
             console.error('1. Неправильный секретный ключ (проверьте в настройках Prodamus)');
             console.error('2. Ключ от другой среды (тестовая/продакшн)');
-            console.error('3. Другой алгоритм подписи');
             return res.status(403).json({ error: 'Invalid signature' });
         }
 
