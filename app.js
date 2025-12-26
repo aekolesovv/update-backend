@@ -1,3 +1,4 @@
+require('dotenv').config();
 const bodyParser = require('body-parser');
 const { errors } = require('celebrate');
 const cors = require('cors');
@@ -10,6 +11,7 @@ const errorHandler = require('./middlewares/errorHandler');
 const { requestLogger, errorLogger } = require('./middlewares/logger');
 const rateLimiter = require('./middlewares/rateLimit');
 const mailerRoutes = require('./routes/mailers');
+const salesRoutes = require('./routes/sales');
 const webhooksRoutes = require('./routes/webhooks');
 const swaggerSpec = require('./swagger');
 
@@ -53,6 +55,7 @@ app.get('/crash-test', () => {
 });
 
 app.use(mailerRoutes);
+app.use(salesRoutes);
 app.use('/api', webhooksRoutes);
 
 app.use((req, res, next) => next(new NotFoundError('Страница не найдена')));

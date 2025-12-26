@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const express = require('express');
 
 const { sendOrderDetails, sendAdminPaymentNotify } = require('../models/mailer');
+const { createSale } = require('../models/sales');
 const { logPayment } = require('../utils/paymentLogger');
 
 const router = express.Router();
@@ -149,6 +150,21 @@ router.post('/prodamus/webhook', async (req, res) => {
             logPayment(data);
 
             const { order_num, sum, customer_email, payment_status_description, date } = data;
+
+            // Сохраняем продажу в БД
+            try {
+                await createSale({
+                    order_num,
+                    sum,
+                    customer_email,
+                    payment_status_description,
+                    date,
+                });
+                console.log(`✅ Sale saved to DB: ${order_num}`);
+            } catch (saleError) {
+                console.error('❌ Failed to save sale to DB:', saleError.message);
+                // Не прерываем выполнение, продолжаем отправку email
+            }
 
             if (customer_email) {
                 try {

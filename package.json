@@ -12,7 +12,8 @@
         "check": "npm run lint && npm run format:check",
         "fix": "npm run lint:fix && npm run format",
         "start": "node app.js",
-        "dev": "nodemon app.js"
+        "dev": "nodemon app.js",
+        "test:email": "node test-email.js"
     },
     "repository": {
         "type": "git",
@@ -46,11 +47,13 @@
         "crypto": "^1.0.1",
         "dotenv": "^16.0.3",
         "express": "^4.18.2",
+        "express-mysql-session": "^3.0.3",
         "express-rate-limit": "^6.7.0",
         "express-session": "^1.18.0",
         "express-winston": "^4.2.0",
         "helmet": "^6.0.1",
         "multer": "^2.0.2",
+        "mysql2": "^3.16.0",
         "nodemailer": "^6.9.7",
         "swagger-jsdoc": "^6.2.8",
         "swagger-ui-express": "^5.0.1",
