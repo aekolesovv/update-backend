@@ -15,7 +15,7 @@ const salesRoutes = require('./routes/sales');
 const webhooksRoutes = require('./routes/webhooks');
 const swaggerSpec = require('./swagger');
 
-const { PORT = 3005 } = process.env;
+const { PORT = 3001 } = process.env;
 
 const app = express();
 

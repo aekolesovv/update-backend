@@ -34,8 +34,11 @@ const sendEmailInfo = async ({ email, subject, text }) => {
         },
     });
 
+    // Если email не указан, используем адрес отправителя из .env
+    const fromEmail = email || process.env.MAIL;
+
     const mailOptions = {
-        from: email,
+        from: fromEmail,
         to: process.env.MAIL,
         subject,
         text,
