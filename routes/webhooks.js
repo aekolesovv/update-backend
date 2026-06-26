@@ -8,6 +8,22 @@ const { logPayment } = require('../utils/paymentLogger');
 
 const router = express.Router();
 
+// Форматирует список товаров из вебхука Prodamus (products[i][name|price|quantity|sum])
+// в читаемый многострочный текст для письма.
+const formatProducts = products => {
+    if (!Array.isArray(products) || products.length === 0) return '  • —';
+    return products
+        .map(p => {
+            const name = (p && p.name) || 'Товар';
+            const qty = (p && p.quantity) || '1';
+            const price = (p && p.price) || '';
+            const lineSum = (p && p.sum) || (price && qty ? Number(price) * Number(qty) : '');
+            const priceStr = price ? `${qty} × ${price} ₽` : `${qty} шт.`;
+            return `  • ${name} — ${priceStr}${lineSum ? ` = ${lineSum} ₽` : ''}`;
+        })
+        .join('\n');
+};
+
 router.post('/prodamus/webhook', async (req, res) => {
     const startTime = new Date().toISOString();
     console.log(`\n🕐 [${startTime}] PRODAMUS WEBHOOK RECEIVED`);
@@ -149,7 +165,20 @@ router.post('/prodamus/webhook', async (req, res) => {
         if (data.payment_status === 'success') {
             logPayment(data);
 
-            const { order_num, sum, customer_email, payment_status_description, date } = data;
+            const {
+                order_num,
+                order_id,
+                sum,
+                customer_email,
+                customer_phone,
+                customer_extra,
+                payment_type,
+                payment_status_description,
+                commission_sum,
+                date,
+            } = data;
+
+            const productsText = formatProducts(data.products);
 
             // Сохраняем продажу в БД
             try {
@@ -173,10 +202,14 @@ router.post('/prodamus/webhook', async (req, res) => {
                         greetings: `
 Спасибо за оплату ❤️
 
-Заказ: ${order_num}
-Сумма: ${sum} ₽
-Дата: ${date}
-Статус: ${payment_status_description}
+Заказ: ${order_num || order_id || '—'}
+Дата: ${date || '—'}
+Статус: ${payment_status_description || 'оплачено'}
+
+Что оплачено:
+${productsText}
+
+Итого: ${sum} ₽
                         `,
                     });
                     console.log(`✅ Email sent to ${customer_email}`);
@@ -190,12 +223,24 @@ router.post('/prodamus/webhook', async (req, res) => {
             }
 
             await sendAdminPaymentNotify({
-                subject: '💰 Новая оплата updateyou.ru',
+                subject: `💰 Новая оплата: ${sum} ₽ — updateyou.ru`,
                 text: `
-Заказ: ${order_num}
-Сумма: ${sum} ₽
-Email: ${customer_email || 'не указан'}
-Дата: ${date}
+Новая оплата на updateyou.ru
+
+Заказ (наш): ${order_id || '—'}
+Заказ (Prodamus): ${order_num || '—'}
+Дата: ${date || '—'}
+Статус: ${payment_status_description || data.payment_status || '—'}
+Способ оплаты: ${payment_type || '—'}
+
+Что оплачено:
+${productsText}
+
+Итого: ${sum} ₽${commission_sum ? `  (комиссия ${commission_sum} ₽)` : ''}
+
+Покупатель:
+  Email: ${customer_email || 'не указан'}
+  Телефон: ${customer_phone || 'не указан'}${customer_extra ? `\n  Доп.: ${customer_extra}` : ''}
                 `,
             });
         }
